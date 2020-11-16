@@ -14,6 +14,7 @@ Public gFSO As FileSystemObject
 
 Public InitialFileBaseName As String
 Private CurrentDoc As ModelDoc2
+Private FolderPath As String
 
 Sub Main()
    Set swApp = Application.SldWorks
@@ -28,16 +29,15 @@ Sub Main()
       Exit Sub
    End If
    
+   FolderPath = gFSO.GetParentFolderName(CurrentDoc.GetPathName)
    InitialFileBaseName = CreateNewName(CurrentDoc.Extension, FindConfiguration(CurrentDoc))
    MainForm.Show
 End Sub
 
 Sub Run(FileBaseName As String, IsDxf As Boolean)
    Dim FileName As String
-   Dim FolderPath As String
    Dim FileExt As String
    
-   FolderPath = gFSO.GetParentFolderName(CurrentDoc.GetPathName)
    If IsDxf Then
       FileExt = ".DXF"
    Else
@@ -65,41 +65,81 @@ Function FindConfiguration(Doc As ModelDoc2) As String
 End Function
 
 Sub ExportFlatPattern(Part As SldWorks.PartDoc, FileName As String)
-                    
-    Dim swEvListener As ExportEventsListener
-    Set swEvListener = New ExportEventsListener
-    
-    'Set the file name for the exported DXF/DWG file
-    Set swEvListener.Part = Part
-    swEvListener.FilePath = FileName
-    
-    'Call the Export command
-    Const WM_COMMAND As Long = &H111
-    Const CMD_ExportFlatPattern As Long = 54244
-    
-    SendMessage swApp.Frame().GetHWnd(), WM_COMMAND, CMD_ExportFlatPattern, 0
-    
-    'wait for property page to be displayed
-    Dim isActive As Boolean
-    
-    Do
-        swApp.GetRunningCommandInfo -1, "", isActive
-        DoEvents
-    Loop While Not isActive
-    
-    Set swEvListener.Part = Nothing
+                   
+   Dim swEvListener As ExportEventsListener
+   Set swEvListener = New ExportEventsListener
+   
+   'Set the file name for the exported DXF/DWG file
+   Set swEvListener.Part = Part
+   swEvListener.FilePath = FileName
+   
+   'Call the Export command
+   Const WM_COMMAND As Long = &H111
+   Const CMD_ExportFlatPattern As Long = 54244
+   
+   SendMessage swApp.Frame().GetHWnd(), WM_COMMAND, CMD_ExportFlatPattern, 0
+   
+   'wait for property page to be displayed
+   Dim isActive As Boolean
+   
+   Do
+      swApp.GetRunningCommandInfo -1, "", isActive
+      DoEvents
+   Loop While Not isActive
+   
+   Set swEvListener.Part = Nothing
 
-    'TODO: call Windows API to set the required options in the property page
-    
-    'close property page
-    'Const swCommands_PmOK As Long = -2
-    'swApp.RunCommand swCommands_PmOK, ""
-    
+   'TODO: call Windows API to set the required options in the property page
+   
+   'close property page
+   'Const swCommands_PmOK As Long = -2
+   'swApp.RunCommand swCommands_PmOK, ""
+   
 End Sub
 
 Function CreateNewName(docext As ModelDocExtension, confName As String) As String
-    CreateNewName = GetProperty("Обозначение", docext, confName) + " " + _
-                    GetProperty("Наименование", docext, confName)
+   Dim Designation As String
+   Dim Name As String
+   Dim ChangeNumber As Integer
+   
+   Designation = GetProperty("Обозначение", docext, confName)
+   Name = GetProperty("Наименование", docext, confName)
+   ChangeNumber = 0
+   
+   If Not GetChangeNumber(Designation, Name, ChangeNumber) Then
+      GetChangeNumber GetBaseDesignation(Designation), Name, ChangeNumber
+   End If
+   
+   CreateNewName = Designation + " " + Name
+   If ChangeNumber > 0 Then
+      CreateNewName = CreateNewName + " (изм." + Format(ChangeNumber, "00") + ")"
+   End If
+End Function
+
+Function GetChangeNumber(Designation As String, Name As String, ByRef ChangeNumber As Integer) As Boolean
+   Dim DrawingName As String
+   Dim Model As ModelDoc2
+   Dim Errors As swFileLoadError_e
+   Dim Errors2 As swActivateDocError_e
+   Dim Warnings As swFileLoadWarning_e
+   
+   GetChangeNumber = False
+   DrawingName = FolderPath + "\" + Designation + " " + Name + ".SLDDRW"
+   If gFSO.FileExists(DrawingName) Then
+      Set Model = swApp.OpenDoc6(DrawingName, swDocDRAWING, _
+         swOpenDocOptions_Silent + swOpenDocOptions_ViewOnly + swOpenDocOptions_ReadOnly, _
+         "", Errors, Warnings)
+      ChangeNumber = ConvertStringToChangeNumber(GetProperty("Изменение", Model.Extension, ""))
+      swApp.QuitDoc DrawingName
+      swApp.ActivateDoc3 CurrentDoc.GetPathName, False, swDontRebuildActiveDoc, Errors2
+      GetChangeNumber = True
+   End If
+End Function
+
+Function ConvertStringToChangeNumber(ChangeNumberProperty As String) As Integer
+   ConvertStringToChangeNumber = 0
+   On Error Resume Next
+   ConvertStringToChangeNumber = CInt(ChangeNumberProperty)
 End Function
 
 Function GetProperty(propName As String, docext As ModelDocExtension, confName As String) As String
@@ -117,4 +157,18 @@ End Function
 Function ExitApp() 'mask
    Unload MainForm
    End
+End Function
+
+Function GetBaseDesignation(Designation As String) As String
+    Dim lastFullstopPosition As Integer
+    Dim firstHyphenPosition As Integer
+    
+    GetBaseDesignation = Designation
+    lastFullstopPosition = InStrRev(Designation, ".")
+    If lastFullstopPosition > 0 Then
+        firstHyphenPosition = InStr(lastFullstopPosition, Designation, "-")
+        If firstHyphenPosition > 0 Then
+            GetBaseDesignation = Left(Designation, firstHyphenPosition - 1)
+        End If
+    End If
 End Function
