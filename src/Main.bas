@@ -9,43 +9,103 @@ Option Explicit
      ByVal hWnd As Long, ByVal wMsg As Long, ByVal wParam As Long, lParam As Any) As Long
 #End If
 
+Public Const DotSLDDRW = ".SLDDRW"
+
 Dim swApp As SldWorks.SldWorks
 Public gFSO As FileSystemObject
 
-Public InitialFileBaseName As String
-Private CurrentDoc As ModelDoc2
-Private FolderPath As String
+Public FileNames As Dictionary
+Public FolderPath As String
+
+Dim CurrentDoc As ModelDoc2
 
 Sub Main()
-   Set swApp = Application.SldWorks
-   Set gFSO = New FileSystemObject
-   
-   Set CurrentDoc = swApp.ActiveDoc
-   If CurrentDoc Is Nothing Then
-      Exit Sub
-   End If
-   If CurrentDoc.GetType <> swDocPART Then
-      MsgBox "Только для деталей.", vbCritical
-      Exit Sub
-   End If
-   
-   FolderPath = gFSO.GetParentFolderName(CurrentDoc.GetPathName)
-   InitialFileBaseName = CreateNewName(CurrentDoc.Extension, FindConfiguration(CurrentDoc))
-   MainForm.Show
+  Set swApp = Application.SldWorks
+  Set gFSO = New FileSystemObject
+  
+  Set CurrentDoc = swApp.ActiveDoc
+  If CurrentDoc Is Nothing Then
+    Exit Sub
+  End If
+  If CurrentDoc.GetType <> swDocPART Then
+    MsgBox "Только для деталей.", vbCritical
+    Exit Sub
+  End If
+  
+  Set FileNames = New Dictionary
+  FolderPath = gFSO.GetParentFolderName(CurrentDoc.GetPathName)
+  
+  SearchFitDrawings
+  InitForm
+  MainForm.Show
 End Sub
 
-Sub Run(FileBaseName As String, IsDxf As Boolean)
-   Dim FileName As String
-   Dim FileExt As String
+Function InitForm() 'hide
+  Dim I As Variant
+  
+  With MainForm.FilenameCmb
+    For Each I In FileNames.Keys
+      .AddItem I
+    Next
+    If .ListCount > 0 Then
+      .ListIndex = 0
+      .SelStart = 0
+      .SelLength = Len(.Text)
+      .SetFocus
+    End If
+  End With
+End Function
+
+Function SearchFitDrawings() 'hide
+
+  Dim Searcher As DrawingSearcher
+  Dim CurFolder As Folder
+  Dim I As Variant
+  Dim F As File
    
-   If IsDxf Then
-      FileExt = ".DXF"
-   Else
-      FileExt = ".DWG"
-   End If
-   FileName = FolderPath + "\" + FileBaseName + FileExt
-   
-   ExportFlatPattern CurrentDoc, FileName
+  Set Searcher = New DrawingSearcher
+  Searcher.Init CurrentDoc
+  
+  Set CurFolder = gFSO.GetFolder(FolderPath)
+  For Each I In CurFolder.Files
+    Set F = I
+    Searcher.AddFileIfFit F.Name
+  Next
+  
+End Function
+
+Sub Run(UserFileName As String, IsDxf As Boolean, IsStep As Boolean)
+  Dim DrawingPath As String
+  Dim ChangeNumber As Integer
+  Dim FileExt As String
+  Dim NewName As String
+  
+  If FileNames.Exists(UserFileName) Then
+    DrawingPath = gFSO.BuildPath(FolderPath, FileNames(UserFileName) + DotSLDDRW)
+    ChangeNumber = GetChangeNumber(DrawingPath)
+  Else
+    ChangeNumber = 0
+  End If
+  
+  If IsStep Then
+    FileExt = ".STEP"
+  ElseIf IsDxf Then
+    FileExt = ".DXF"
+  Else
+    FileExt = ".DWG"
+  End If
+  
+  If ChangeNumber = 0 Then
+    NewName = gFSO.BuildPath(FolderPath, UserFileName + FileExt)
+  Else
+    NewName = gFSO.BuildPath(FolderPath, UserFileName + " (rev." + Format(ChangeNumber, "00") + ")" + FileExt)
+  End If
+
+  If IsStep Then
+    SaveToSTEP CurrentDoc, NewName
+  Else
+    ExportFlatPattern CurrentDoc, NewName
+  End If
 End Sub
 
 Function FindConfiguration(Doc As ModelDoc2) As String
@@ -97,43 +157,24 @@ Sub ExportFlatPattern(Part As SldWorks.PartDoc, FileName As String)
    
 End Sub
 
-Function CreateNewName(docext As ModelDocExtension, confName As String) As String
-   Dim Designation As String
-   Dim Name As String
-   Dim ChangeNumber As Integer
+Function GetChangeNumber(DrawingPath As String) As Integer
+  Dim Model As ModelDoc2
+  Dim errors As swFileLoadError_e
+  Dim Errors2 As swActivateDocError_e
+  Dim warnings As swFileLoadWarning_e
+  Dim I As Variant
+  Dim F As File
    
-   Designation = GetProperty("Обозначение", docext, confName)
-   Name = GetProperty("Наименование", docext, confName)
-   ChangeNumber = 0
-   
-   If Not GetChangeNumber(Designation, Name, ChangeNumber) Then
-      GetChangeNumber GetBaseDesignation(Designation), Name, ChangeNumber
-   End If
-   
-   CreateNewName = Designation + " " + Name
-   If ChangeNumber > 0 Then
-      CreateNewName = CreateNewName + " (изм." + Format(ChangeNumber, "00") + ")"
-   End If
-End Function
-
-Function GetChangeNumber(Designation As String, Name As String, ByRef ChangeNumber As Integer) As Boolean
-   Dim DrawingName As String
-   Dim Model As ModelDoc2
-   Dim Errors As swFileLoadError_e
-   Dim Errors2 As swActivateDocError_e
-   Dim Warnings As swFileLoadWarning_e
-   
-   GetChangeNumber = False
-   DrawingName = FolderPath + "\" + Designation + " " + Name + ".SLDDRW"
-   If gFSO.FileExists(DrawingName) Then
-      Set Model = swApp.OpenDoc6(DrawingName, swDocDRAWING, _
-         swOpenDocOptions_Silent + swOpenDocOptions_ViewOnly + swOpenDocOptions_ReadOnly, _
-         "", Errors, Warnings)
-      ChangeNumber = ConvertStringToChangeNumber(GetProperty("Изменение", Model.Extension, ""))
-      swApp.QuitDoc DrawingName
-      swApp.ActivateDoc3 CurrentDoc.GetPathName, False, swDontRebuildActiveDoc, Errors2
-      GetChangeNumber = True
-   End If
+  GetChangeNumber = 0
+  
+  If gFSO.FileExists(DrawingPath) Then
+    Set Model = swApp.OpenDoc6(DrawingPath, swDocDRAWING, _
+       swOpenDocOptions_Silent + swOpenDocOptions_ViewOnly + swOpenDocOptions_ReadOnly, _
+       "", errors, warnings)
+    GetChangeNumber = ConvertStringToChangeNumber(GetProperty("Изменение", Model.Extension, ""))
+    swApp.QuitDoc DrawingPath
+    swApp.ActivateDoc3 CurrentDoc.GetPathName, False, swDontRebuildActiveDoc, Errors2
+  End If
 End Function
 
 Function ConvertStringToChangeNumber(ChangeNumberProperty As String) As Integer
@@ -142,16 +183,16 @@ Function ConvertStringToChangeNumber(ChangeNumberProperty As String) As Integer
    ConvertStringToChangeNumber = CInt(ChangeNumberProperty)
 End Function
 
-Function GetProperty(propName As String, docext As ModelDocExtension, confName As String) As String
-    Dim resultGetProp As swCustomInfoGetResult_e
-    Dim rawProp As String, resolvedValue As String
-    Dim wasResolved As Boolean
-    
-    resultGetProp = docext.CustomPropertyManager(confName).Get5(propName, True, rawProp, resolvedValue, wasResolved)
-    If resultGetProp = swCustomInfoGetResult_NotPresent Then
-        docext.CustomPropertyManager("").Get5 propName, True, rawProp, resolvedValue, wasResolved
-    End If
-    GetProperty = resolvedValue
+Function GetProperty(propName As String, DocExt As ModelDocExtension, ConfName As String) As String
+   Dim resultGetProp As swCustomInfoGetResult_e
+   Dim rawProp As String, resolvedValue As String
+   Dim wasResolved As Boolean
+   
+   resultGetProp = DocExt.CustomPropertyManager(ConfName).Get5(propName, True, rawProp, resolvedValue, wasResolved)
+   If resultGetProp = swCustomInfoGetResult_NotPresent Then
+      DocExt.CustomPropertyManager("").Get5 propName, True, rawProp, resolvedValue, wasResolved
+   End If
+   GetProperty = resolvedValue
 End Function
 
 Function ExitApp() 'mask
@@ -171,4 +212,34 @@ Function GetBaseDesignation(Designation As String) As String
             GetBaseDesignation = Left(Designation, firstHyphenPosition - 1)
         End If
     End If
+End Function
+
+Sub SaveToSTEP(Doc As ModelDoc2, FileName As String)
+    Dim errors As swFileSaveError_e
+    Dim warnings As swFileSaveWarning_e
+    
+    Doc.Extension.SaveAs FileName, swSaveAsCurrentVersion, swSaveAsOptions_Silent, Nothing, errors, warnings
+End Sub
+
+'See: https://docs.microsoft.com/en-us/dotnet/api/System.Text.RegularExpressions.Regex.Escape
+Function RegEscape(ByVal Line As String) As String
+
+  Line = Replace(Line, "\", "\\")  'MUST be first!
+  Line = Replace(Line, ".", "\.")
+  Line = Replace(Line, "[", "\[")
+  'line = Replace(line, "]", "\]")
+  Line = Replace(Line, "|", "\|")
+  Line = Replace(Line, "^", "\^")
+  Line = Replace(Line, "$", "\$")
+  Line = Replace(Line, "?", "\?")
+  Line = Replace(Line, "+", "\+")
+  Line = Replace(Line, "*", "\*")
+  Line = Replace(Line, "{", "\{")
+  'line = Replace(line, "}", "\}")
+  Line = Replace(Line, "(", "\(")
+  Line = Replace(Line, ")", "\)")
+  Line = Replace(Line, "#", "\#")
+  'and white space??
+  RegEscape = Line
+    
 End Function

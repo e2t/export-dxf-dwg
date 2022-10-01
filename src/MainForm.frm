@@ -18,34 +18,45 @@ Option Explicit
 Private Const OptionIsDXF = "IsDXF"
 
 Private Sub CancelBtn_Click()
-   ExitApp
+
+  ExitApp
+  
 End Sub
 
 Private Sub DwgRad_Click()
-   SaveBoolSetting OptionIsDXF, False
+
+  SaveBoolSetting OptionIsDXF, False
+  
 End Sub
 
 Private Sub DxfRad_Click()
-   SaveBoolSetting OptionIsDXF, True
+
+  SaveBoolSetting OptionIsDXF, True
+  
 End Sub
 
 Private Sub RunBtn_Click()
-   Dim FileBaseName As String
-   Dim IsDxf As Boolean
-   
-   FileBaseName = Me.FilenameTxt.Text
-   IsDxf = Me.DxfRad.value
-   
-   Me.Hide
-   Run FileBaseName, IsDxf
-   ExitApp
+
+  Dim FileBaseName As String
+  Dim IsDxf As Boolean
+  Dim IsStep As Boolean
+  
+  FileBaseName = Me.FilenameCmb.Text
+  IsDxf = Me.DxfRad.Value
+  IsStep = Me.StepRad.Value
+  
+  Me.Hide
+  Run FileBaseName, IsDxf, IsStep
+  ExitApp
+  
 End Sub
 
 Private Sub UserForm_Initialize()
-   Me.FilenameTxt.Text = InitialFileBaseName
+
    If GetBoolSetting(OptionIsDXF) Then
-      Me.DxfRad.value = True
+      Me.DxfRad.Value = True
    Else
-      Me.DwgRad.value = True
+      Me.DwgRad.Value = True
    End If
+   
 End Sub
