@@ -106,6 +106,12 @@ Sub Run(UserFileName As String, IsDxf As Boolean, IsStep As Boolean)
   Else
     ExportFlatPattern CurrentDoc, NewName
   End If
+  
+  'SelectInExplorer IIf(gFSO.FileExists(NewName), NewName, CurrentDoc.GetPathName)
+End Sub
+
+Sub SelectInExplorer(FileName As String)
+    Shell "explorer.exe /select, """ & FileName & """", vbMinimizedNoFocus
 End Sub
 
 Function FindConfiguration(Doc As ModelDoc2) As String
@@ -140,12 +146,11 @@ Sub ExportFlatPattern(Part As SldWorks.PartDoc, FileName As String)
    SendMessage swApp.Frame().GetHWnd(), WM_COMMAND, CMD_ExportFlatPattern, 0
    
    'wait for property page to be displayed
-   Dim isActive As Boolean
-   
-   Do
-      swApp.GetRunningCommandInfo -1, "", isActive
-      DoEvents
-   Loop While Not isActive
+   'Dim isActive As Boolean
+   'Do
+   '   swApp.GetRunningCommandInfo -1, "", isActive
+   '   DoEvents
+   'Loop While Not isActive
    
    Set swEvListener.Part = Nothing
 

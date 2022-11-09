@@ -41,20 +41,20 @@ Sub AddFileIfFit(aFileName As String)
   
   For Each I In Names
     Name = I
-    If CheckFile(ConfDesignation) Then
+    If CheckAndAddFile(ConfDesignation) Then
       Exit Sub
-    ElseIf CheckFile(GetBaseDesignation(ConfDesignation)) Then
+    ElseIf CheckAndAddFile(GetBaseDesignation(ConfDesignation)) Then
       Exit Sub
     End If
   Next
 End Sub
 
-Private Function CheckFile(Designation As String) As Boolean
+Private Function CheckAndAddFile(Designation As String) As Boolean
   Dim NameF As String
   
-  Regex.Pattern = RegEscape(Designation) + " (" + RegEscape(Name) + " *(\(.*\))?)" + RegEscape(DotSLDDRW)
-  CheckFile = Regex.Test(FileName)
-  If CheckFile Then
+  Regex.Pattern = "^" + RegEscape(Designation) + " (" + RegEscape(Name) + " *(\(.*\))?)" + RegEscape(DotSLDDRW)
+  CheckAndAddFile = Regex.Test(FileName)
+  If CheckAndAddFile Then
     NameF = Regex.Execute(FileName)(0).SubMatches(0)
     FileNames.Add ConfDesignation + " " + NameF, gFSO.GetBaseName(FileName)
   End If
