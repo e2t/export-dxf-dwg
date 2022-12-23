@@ -4,28 +4,28 @@ Option Explicit
 Const macroName = "ExportDxfDwg"
 Const macroSection = "Main"
 
-Sub SaveStrSetting(key As String, value As String)
-    SaveSetting macroName, macroSection, key, value
+Sub SaveStrSetting(Key As String, value As String)
+    SaveSetting macroName, macroSection, Key, value
 End Sub
 
-Sub SaveIntSetting(key As String, value As Integer)
-    SaveStrSetting key, str(value)
+Sub SaveIntSetting(Key As String, value As Integer)
+    SaveStrSetting Key, str(value)
 End Sub
 
-Sub SaveBoolSetting(key As String, value As Boolean)
-    SaveStrSetting key, BoolToStr(value)
+Sub SaveBoolSetting(Key As String, value As Boolean)
+    SaveStrSetting Key, BoolToStr(value)
 End Sub
 
-Function GetStrSetting(key As String, Optional default As String = "") As String
-    GetStrSetting = GetSetting(macroName, macroSection, key, default)
+Function GetStrSetting(Key As String, Optional default As String = "") As String
+    GetStrSetting = GetSetting(macroName, macroSection, Key, default)
 End Function
 
-Function GetBoolSetting(key As String) As Boolean
-    GetBoolSetting = StrToBool(GetStrSetting(key, "0"))
+Function GetBoolSetting(Key As String) As Boolean
+    GetBoolSetting = StrToBool(GetStrSetting(Key, "0"))
 End Function
 
-Function GetIntSetting(key As String) As Integer
-    GetIntSetting = StrToInt(GetStrSetting(key, "0"))
+Function GetIntSetting(Key As String) As Integer
+    GetIntSetting = StrToInt(GetStrSetting(Key, "0"))
 End Function
 
 Function StrToInt(value As String) As Integer
